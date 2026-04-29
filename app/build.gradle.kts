@@ -94,7 +94,10 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
 
-    // Media3 (ExpoPlayer)
+    // Media (MediaSessionCompat etc)
+    implementation("androidx.media:media:1.7.0")
+
+    // Media3 (ExoPlayer)
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.session)
 
