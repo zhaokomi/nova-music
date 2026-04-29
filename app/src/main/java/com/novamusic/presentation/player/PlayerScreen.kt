@@ -1,15 +1,13 @@
 package com.novamusic.presentation.player
 
+import android.util.Log
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -21,7 +19,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -42,9 +39,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/**
- * LRC 歌词行数据结构
- */
+private const val TAG = "PlayerScreen"
+
 data class LyricLine(
     val timeMs: Long,
     val text: String
@@ -67,120 +63,97 @@ fun PlayerScreen(
 
     var showSleepTimer by remember { mutableStateOf(false) }
     var showMoreMenu by remember { mutableStateOf(false) }
-    // 封面页/歌词页切换
     var showLyrics by remember { mutableStateOf(false) }
-    // 手动滚动标志
     var userScrolling by remember { mutableStateOf(false) }
-
-    // Dynamic accent color
     var accentColor by remember { mutableStateOf(Color(0xFF6750A4)) }
-
-    // Parse lyrics for current song
     var lyrics by remember { mutableStateOf<List<LyricLine>>(emptyList()) }
     var currentLyricIndex by remember { mutableIntStateOf(0) }
     val lyricListState = rememberLazyListState()
 
-    // 关键修复: 根据 songId 加载歌曲到播放队列
+    // 加载歌曲到播放队列
     LaunchedEffect(songId) {
         if (songId > 0) {
+            Log.d(TAG, "LaunchedEffect: loading songId=$songId")
             viewModel.loadAndPlaySong(songId)
         }
     }
 
-    // Load covers and lyrics
+    // 封面颜色和歌词
     LaunchedEffect(state.currentSong) {
         val song = state.currentSong
         if (song != null) {
-            // Extract accent color
             if (themeSettings.dynamicColorEnabled) {
                 val color = withContext(Dispatchers.IO) {
                     extractVibrantColor(song.coverPath)
                 }
                 accentColor = color
-                themeViewModel.setAccentColor(color.value.toLong())
             }
-            // Parse LRC lyrics
             val lrcPath = song.filePath.replaceAfterLast('.', "lrc")
-            val parsed = withContext(Dispatchers.IO) {
-                parseLrcFile(lrcPath)
-            }
+            val parsed = withContext(Dispatchers.IO) { parseLrcFile(lrcPath) }
             lyrics = parsed
         }
     }
 
-    // Auto-scroll lyrics
+    // 歌词自动滚动
     LaunchedEffect(state.currentPosition, lyrics, userScrolling) {
         if (lyrics.isNotEmpty() && !userScrolling) {
             val idx = lyrics.indexOfLast { it.timeMs <= state.currentPosition }
             if (idx in lyrics.indices) {
                 currentLyricIndex = idx
-                lyricListState.animateScrollToItem(
-                    index = idx.coerceAtLeast(0),
-                    scrollOffset = -150
-                )
+                lyricListState.animateScrollToItem(idx.coerceAtLeast(0), -150)
             }
         }
     }
 
-    // Reset user scrolling after 3 seconds
     LaunchedEffect(userScrolling) {
-        if (userScrolling) {
-            delay(3000)
-            userScrolling = false
-        }
+        if (userScrolling) { delay(3000); userScrolling = false }
     }
 
-    // Gesture state
-    var swipeProgress by remember { mutableStateOf(0f) }
+    // 判断播放状态用于 UI 展示
+    val hasSong = state.currentSong != null
+    val hasError = state.error != null
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Column {
-                        Text(
-                            state.currentSong?.title ?: "NovaMusic",
+                        Text(if (hasSong) state.currentSong!!.title else "NovaMusic",
                             style = MaterialTheme.typography.titleMedium,
-                            maxLines = 1, overflow = TextOverflow.Ellipsis
-                        )
-                        state.currentSong?.let {
-                            Text(
-                                "${it.artist} · ${it.album}",
+                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (hasSong) {
+                            Text("${state.currentSong!!.artist} · ${state.currentSong!!.album}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1, overflow = TextOverflow.Ellipsis
-                            )
+                                maxLines = 1, overflow = TextOverflow.Ellipsis)
                         }
                     }
                 },
                 navigationIcon = {
                     IconButton(onClick = onNavigateBack) {
-                        Icon(Icons.Default.ArrowBack, contentDescription = "返回")
+                        Icon(Icons.Default.ArrowBack, "返回")
                     }
                 },
                 actions = {
                     Box {
                         IconButton(onClick = { showMoreMenu = true }) {
-                            Icon(Icons.Default.MoreVert, contentDescription = "更多")
+                            Icon(Icons.Default.MoreVert, "更多")
                         }
-                        DropdownMenu(
-                            expanded = showMoreMenu,
-                            onDismissRequest = { showMoreMenu = false }
-                        ) {
+                        DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
                             DropdownMenuItem(
                                 text = { Text("睡眠定时器") },
                                 onClick = { showMoreMenu = false; showSleepTimer = true },
-                                leadingIcon = { Icon(Icons.Default.Bedtime, contentDescription = null) }
+                                leadingIcon = { Icon(Icons.Default.Bedtime, null) }
                             )
                             DropdownMenuItem(
                                 text = { Text("播放队列") },
                                 onClick = { showMoreMenu = false; onNavigateToPlayQueue() },
-                                leadingIcon = { Icon(Icons.Default.QueueMusic, contentDescription = null) }
+                                leadingIcon = { Icon(Icons.Default.QueueMusic, null) }
                             )
                             DropdownMenuItem(
                                 text = { Text(if (showLyrics) "封面视图" else "歌词视图") },
                                 onClick = { showMoreMenu = false; showLyrics = !showLyrics },
-                                leadingIcon = { Icon(Icons.Default.Lyrics, contentDescription = null) }
+                                leadingIcon = { Icon(Icons.Default.Lyrics, null) }
                             )
                         }
                     }
@@ -190,145 +163,80 @@ fun PlayerScreen(
         }
     ) { padding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            accentColor.copy(alpha = 0.15f),
-                            MaterialTheme.colorScheme.surface
-                        )
-                    )
-                )
-                // Gesture handlers for swipe-to-change-track
-                .pointerInput(Unit) {
-                    detectHorizontalDragGestures(
-                        onDragEnd = {
-                            if (swipeProgress > 50f) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                viewModel.skipToPrevious()
-                            } else if (swipeProgress < -50f) {
-                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                viewModel.skipToNext()
-                            }
-                            swipeProgress = 0f
-                        },
-                        onDragCancel = { swipeProgress = 0f },
-                        onHorizontalDrag = { _, dragAmount -> swipeProgress += dragAmount }
-                    )
-                }
+            modifier = Modifier.fillMaxSize().padding(padding)
+                .background(Brush.verticalGradient(
+                    listOf(accentColor.copy(alpha = 0.12f), MaterialTheme.colorScheme.surface)
+                ))
         ) {
-            Column(modifier = Modifier.fillMaxSize()) {
-                // Swipe indicator
-                if (swipeProgress != 0f) {
-                    Box(modifier = Modifier.fillMaxWidth().height(4.dp)) {
-                        LinearProgressIndicator(
-                            progress = { (kotlin.math.abs(swipeProgress) / 200f).coerceIn(0f, 1f) },
-                            modifier = Modifier.fillMaxWidth(),
-                            color = accentColor
-                        )
-                    }
-                }
-
-                // Main content: cover or lyrics
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .clickable { showLyrics = !showLyrics }
-                ) {
-                    // 封面页 / 歌词页切换动画
-                    AnimatedContent(
-                        targetState = showLyrics,
-                        transitionSpec = {
-                            if (targetState) {
-                                (fadeIn() + slideInHorizontally { it }) togetherWith
-                                        (fadeOut() + slideOutHorizontally { -it })
-                            } else {
-                                (fadeIn() + slideInHorizontally { -it }) togetherWith
-                                        (fadeOut() + slideOutHorizontally { it })
-                            }
-                        },
-                        label = "cover_lyrics"
-                    ) { isLyrics ->
-                        if (isLyrics) {
-                            // ===== 歌词页 =====
-                            LyricPage(
-                                lyrics = lyrics,
-                                currentIndex = currentLyricIndex,
-                                currentSong = state.currentSong,
-                                accentColor = accentColor,
-                                lyricListState = lyricListState,
-                                onUserScroll = { userScrolling = true }
-                            )
-                        } else {
-                            // ===== 封面页 =====
-                            CoverPage(
-                                song = state.currentSong,
-                                accentColor = accentColor,
-                                coverPath = state.currentSong?.coverPath,
-                                currentPosition = state.currentPosition,
-                                duration = state.duration,
-                                isLoading = state.isLoading,
-                                onSeek = viewModel::seekTo,
-                                onDoubleTap = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    viewModel.togglePlayPause()
-                                }
-                            )
+            when {
+                // 加载中
+                !hasSong && state.isLoading -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator(color = accentColor)
+                            Spacer(Modifier.height(16.dp))
+                            Text("正在加载歌曲...", style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     }
                 }
-
-                // 切换提示
-                Text(
-                    text = if (showLyrics) "点击返回封面" else "点击查看歌词",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(Modifier.height(4.dp))
-
-                // Progress bar
-                PlaybackProgressBar(
-                    currentPosition = state.currentPosition,
-                    duration = state.duration,
-                    onSeek = viewModel::seekTo,
-                    modifier = Modifier.padding(horizontal = 16.dp)
-                )
-
-                // Controls
-                PlayerControls(
-                    isPlaying = state.isPlaying,
-                    playMode = state.playMode,
-                    onPlayPauseClick = viewModel::togglePlayPause,
-                    onSkipPrevious = viewModel::skipToPrevious,
-                    onSkipNext = viewModel::skipToNext,
-                    onPlayModeClick = viewModel::cyclePlayMode,
-                    onQueueClick = onNavigateToPlayQueue,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                )
-
-                // Sleep timer indicator
-                if (uiState.isSleepTimerActive) {
-                    Text(
-                        "⏰ ${uiState.sleepTimerMinutes} 分钟后停止",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-                        textAlign = TextAlign.Center
+                // 错误状态
+                hasError -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.ErrorOutline, null, modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.error)
+                            Spacer(Modifier.height(16.dp))
+                            Text("播放出错", style = MaterialTheme.typography.titleMedium)
+                            Spacer(Modifier.height(8.dp))
+                            Text(state.error ?: "未知错误", style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Spacer(Modifier.height(16.dp))
+                            OutlinedButton(onClick = { viewModel.loadAndPlaySong(songId) }) {
+                                Text("重试")
+                            }
+                        }
+                    }
+                }
+                // 等待播放开始（歌曲已加载但还没开始播放）
+                !hasSong && !state.isLoading && !hasError -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.MusicNote, null, modifier = Modifier.size(64.dp),
+                                tint = accentColor.copy(alpha = 0.5f))
+                            Spacer(Modifier.height(16.dp))
+                            Text("准备播放...", style = MaterialTheme.typography.bodyLarge,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+                // 正常播放状态
+                else -> {
+                    NormalPlayerContent(
+                        state = state,
+                        showLyrics = showLyrics,
+                        lyrics = lyrics,
+                        currentLyricIndex = currentLyricIndex,
+                        lyricListState = lyricListState,
+                        accentColor = accentColor,
+                        onToggleLyrics = { showLyrics = !showLyrics },
+                        onUserScroll = { userScrolling = true },
+                        onDoubleTap = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); viewModel.togglePlayPause() },
+                        onTogglePlayPause = viewModel::togglePlayPause,
+                        onSkipPrev = viewModel::skipToPrevious,
+                        onSkipNext = viewModel::skipToNext,
+                        onSeek = viewModel::seekTo,
+                        onCycleMode = viewModel::cyclePlayMode,
+                        onQueue = onNavigateToPlayQueue,
+                        sleepTimerMinutes = uiState.sleepTimerMinutes,
+                        isSleepTimerActive = uiState.isSleepTimerActive
                     )
                 }
-
-                Spacer(Modifier.height(16.dp))
             }
         }
     }
 
-    // 睡眠定时器对话框
+    // Sleep timer dialog
     if (showSleepTimer) {
         SleepTimerDialog(
             remainingMinutes = uiState.sleepTimerMinutes,
@@ -338,188 +246,177 @@ fun PlayerScreen(
             onDismiss = { showSleepTimer = false }
         )
     }
-
-    // 加载中指示器
-    if (state.isLoading) {
-        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator(color = accentColor)
-        }
-    }
 }
 
 /**
- * 封面页 —— 大尺寸专辑封面 + 进度条 + 控制按钮
+ * 正常播放内容：封面/歌词 + 进度条 + 控制按钮
  */
 @Composable
-private fun CoverPage(
-    song: com.novamusic.domain.model.Song?,
+private fun NormalPlayerContent(
+    state: com.novamusic.service.PlaybackState,
+    showLyrics: Boolean,
+    lyrics: List<LyricLine>,
+    currentLyricIndex: Int,
+    lyricListState: androidx.compose.foundation.lazy.LazyListState,
     accentColor: Color,
-    coverPath: String?,
-    currentPosition: Long,
-    duration: Long,
-    isLoading: Boolean,
+    onToggleLyrics: () -> Unit,
+    onUserScroll: () -> Unit,
+    onDoubleTap: () -> Unit,
+    onTogglePlayPause: () -> Unit,
+    onSkipPrev: () -> Unit,
+    onSkipNext: () -> Unit,
     onSeek: (Long) -> Unit,
-    onDoubleTap: () -> Unit
+    onCycleMode: () -> Unit,
+    onQueue: () -> Unit,
+    sleepTimerMinutes: Int,
+    isSleepTimerActive: Boolean
 ) {
-    Column(
-        modifier = Modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Spacer(Modifier.height(16.dp))
+    val song = state.currentSong ?: return
 
-        // Album art
+    Column(modifier = Modifier.fillMaxSize()) {
+        // 主内容区
         Box(
-            modifier = Modifier
-                .fillMaxWidth(0.75f)
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(24.dp))
-                .pointerInput(Unit) {
-                    detectTapGestures(onDoubleTap = { onDoubleTap() })
-                },
-            contentAlignment = Alignment.Center
+            modifier = Modifier.weight(1f).fillMaxWidth()
+                .clickable { onToggleLyrics() }
         ) {
-            if (coverPath != null) {
-                AsyncImage(
-                    model = coverPath,
-                    contentDescription = "专辑封面",
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
+            AnimatedContent(targetState = showLyrics, label = "lyrics_toggle",
+                transitionSpec = {
+                    (fadeIn() + slideInHorizontally { if (targetState) it else -it }) togetherWith
+                    (fadeOut() + slideOutHorizontally { if (targetState) -it else it })
+                }
+            ) { isLyrics ->
+                if (isLyrics) {
+                    LyricContent(lyrics, currentLyricIndex, song, accentColor, lyricListState, onUserScroll)
+                } else {
+                    CoverContent(song, accentColor, onDoubleTap, state)
+                }
+            }
+        }
+
+        // 切换提示
+        Text(
+            text = if (showLyrics) "点击返回封面" else "点击查看歌词",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
+        )
+        Spacer(Modifier.height(4.dp))
+
+        // 进度条
+        PlaybackProgressBar(
+            currentPosition = state.currentPosition,
+            duration = state.duration,
+            onSeek = onSeek,
+            modifier = Modifier.padding(horizontal = 16.dp)
+        )
+
+        // 控制按钮
+        PlayerControls(
+            isPlaying = state.isPlaying,
+            playMode = state.playMode,
+            onPlayPauseClick = onTogglePlayPause,
+            onSkipPrevious = onSkipPrev,
+            onSkipNext = onSkipNext,
+            onPlayModeClick = onCycleMode,
+            onQueueClick = onQueue,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+        )
+
+        if (isSleepTimerActive) {
+            Text("⏰ ${sleepTimerMinutes} 分钟后停止",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
+                textAlign = TextAlign.Center
+            )
+        }
+        Spacer(Modifier.height(16.dp))
+    }
+}
+
+@Composable
+private fun CoverContent(
+    song: com.novamusic.domain.model.Song,
+    accentColor: Color,
+    onDoubleTap: () -> Unit,
+    state: com.novamusic.service.PlaybackState
+) {
+    Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center) {
+        Spacer(Modifier.height(16.dp))
+        // 专辑封面
+        Box(Modifier.fillMaxWidth(0.7f).aspectRatio(1f).clip(RoundedCornerShape(24.dp)),
+            contentAlignment = Alignment.Center) {
+            if (song.coverPath != null) {
+                AsyncImage(model = song.coverPath, contentDescription = "封面",
+                    modifier = Modifier.fillMaxSize(), contentScale = ContentScale.Crop)
             } else {
-                Surface(
-                    modifier = Modifier.fillMaxSize(),
-                    shape = RoundedCornerShape(24.dp),
-                    color = accentColor.copy(alpha = 0.3f)
-                ) {
+                Surface(Modifier.fillMaxSize(), shape = RoundedCornerShape(24.dp),
+                    color = accentColor.copy(alpha = 0.3f)) {
                     Box(contentAlignment = Alignment.Center) {
-                        Icon(
-                            Icons.Default.MusicNote,
-                            contentDescription = null,
-                            modifier = Modifier.size(80.dp),
-                            tint = accentColor
-                        )
+                        Icon(Icons.Default.MusicNote, null, Modifier.size(80.dp), tint = accentColor)
                     }
                 }
             }
         }
-
         Spacer(Modifier.height(24.dp))
-
-        // Song info
-        Text(
-            song?.title ?: "未在播放",
-            style = MaterialTheme.typography.headlineSmall,
-            fontWeight = FontWeight.Bold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 32.dp)
-        )
-
+        Text(song.title, style = MaterialTheme.typography.headlineSmall,
+            fontWeight = FontWeight.Bold, maxLines = 1,
+            overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 32.dp))
         Spacer(Modifier.height(4.dp))
-
-        Text(
-            song?.artist ?: "",
-            style = MaterialTheme.typography.bodyLarge,
+        Text(song.artist, style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(horizontal = 32.dp)
-        )
-
-        if (song != null && song.album.isNotEmpty() && song.album != "未知专辑") {
+            maxLines = 1, overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 32.dp))
+        if (song.album.isNotEmpty() && song.album != "未知专辑") {
             Spacer(Modifier.height(2.dp))
-            Text(
-                song.album,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                textAlign = TextAlign.Center
-            )
+            Text(song.album, style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f))
         }
+        Spacer(Modifier.height(16.dp))
+        if (state.isLoading) { CircularProgressIndicator(Modifier.size(24.dp), color = accentColor) }
     }
 }
 
-/**
- * 歌词页 —— 自动滚动歌词列表
- */
 @Composable
-private fun LyricPage(
-    lyrics: List<LyricLine>,
-    currentIndex: Int,
-    currentSong: com.novamusic.domain.model.Song?,
-    accentColor: Color,
-    lyricListState: androidx.compose.foundation.lazy.LazyListState,
+private fun LyricContent(
+    lyrics: List<LyricLine>, currentIndex: Int,
+    song: com.novamusic.domain.model.Song, accentColor: Color,
+    listState: androidx.compose.foundation.lazy.LazyListState,
     onUserScroll: () -> Unit
 ) {
     if (lyrics.isEmpty()) {
-        // 无歌词时显示提示
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                // Small cover art
-                if (currentSong?.coverPath != null) {
-                    AsyncImage(
-                        model = currentSong.coverPath,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(120.dp)
-                            .clip(RoundedCornerShape(16.dp)),
-                        contentScale = ContentScale.Crop
-                    )
-                    Spacer(Modifier.height(16.dp))
-                } else {
-                    Icon(
-                        Icons.Default.MusicNote,
-                        contentDescription = null,
-                        modifier = Modifier.size(80.dp),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                    )
-                    Spacer(Modifier.height(16.dp))
+                if (song.coverPath != null) {
+                    AsyncImage(model = song.coverPath, contentDescription = null,
+                        modifier = Modifier.size(100.dp).clip(RoundedCornerShape(12.dp)),
+                        contentScale = ContentScale.Crop)
+                    Spacer(Modifier.height(12.dp))
                 }
-                Text(
-                    "暂无歌词",
-                    style = MaterialTheme.typography.titleMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                )
+                Text("暂无歌词", style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f))
                 Spacer(Modifier.height(4.dp))
-                Text(
-                    "请将同名 .lrc 文件放在音乐目录下",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-                )
+                Text("将同名 .lrc 文件放在音乐目录", style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f))
             }
         }
     } else {
-        // 歌词列表
-        LazyColumn(
-            state = lyricListState,
-            modifier = Modifier.fillMaxSize(),
+        LazyColumn(state = listState, modifier = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(vertical = 180.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            itemsIndexed(lyrics) { index, line ->
-                val isCurrent = index == currentIndex
-                Text(
-                    text = line.text,
+            horizontalAlignment = Alignment.CenterHorizontally) {
+            itemsIndexed(lyrics) { idx, line ->
+                val isCurrent = idx == currentIndex
+                Text(text = line.text,
                     fontSize = if (isCurrent) 22.sp else 16.sp,
                     fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                    color = if (isCurrent) {
-                        accentColor
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                            alpha = if (kotlin.math.abs(index - currentIndex) <= 2) 0.6f else 0.3f
-                        )
-                    },
+                    color = if (isCurrent) accentColor
+                    else MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                        alpha = if (kotlin.math.abs(idx - currentIndex) <= 2) 0.5f else 0.25f),
                     textAlign = TextAlign.Center,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 32.dp, vertical = 6.dp)
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 32.dp, vertical = 6.dp)
                         .clickable { onUserScroll() }
                 )
             }
@@ -527,30 +424,19 @@ private fun LyricPage(
     }
 }
 
-/**
- * 简易 LRC 歌词解析器
- */
 private fun parseLrcFile(filePath: String): List<LyricLine> {
     return try {
         val file = java.io.File(filePath)
         if (!file.exists()) return emptyList()
-        val lines = file.readLines()
         val pattern = Regex("""\[(\d{2}):(\d{2})\.(\d{2,3})](.*)""")
-        lines.mapNotNull { line ->
-            pattern.matchEntire(line.trim())?.let { match ->
-                val min = match.groupValues[1].toIntOrNull() ?: return@let null
-                val sec = match.groupValues[2].toIntOrNull() ?: return@let null
-                val msStr = match.groupValues[3]
-                val ms = (msStr.toIntOrNull() ?: return@let null) *
-                        (if (msStr.length == 2) 10 else 1)
-                val text = match.groupValues[4].trim()
-                LyricLine(
-                    timeMs = (min * 60 + sec) * 1000L + ms,
-                    text = text
-                )
+        file.readLines().mapNotNull { line ->
+            pattern.matchEntire(line.trim())?.let { m ->
+                val min = m.groupValues[1].toIntOrNull() ?: return@let null
+                val sec = m.groupValues[2].toIntOrNull() ?: return@let null
+                val msStr = m.groupValues[3]
+                val ms = (msStr.toIntOrNull() ?: return@let null) * (if (msStr.length == 2) 10 else 1)
+                LyricLine((min * 60 + sec) * 1000L + ms, m.groupValues[4].trim())
             }
         }.sortedBy { it.timeMs }
-    } catch (e: Exception) {
-        emptyList()
-    }
+    } catch (e: Exception) { emptyList() }
 }
