@@ -201,17 +201,34 @@ class MusicService : Service() {
     }
 
     private fun loadAndPlay(song: Song) {
-        val mediaItem = MediaItem.fromUri(song.filePath)
-        exoPlayer.setMediaItem(mediaItem)
-        exoPlayer.prepare()
-        exoPlayer.play()
-        _playbackState.update {
-            it.copy(
-                currentSong = song,
-                isPlaying = true,
-                duration = song.duration,
-                currentPosition = 0L
-            )
+        try {
+            val path = song.filePath
+            val uri = if (path.startsWith("content://") || path.startsWith("file://")) {
+                android.net.Uri.parse(path)
+            } else {
+                // Local absolute path
+                androidx.media3.common.MediaItem.fromUri(path)
+            }
+            val mediaItem = if (uri is android.net.Uri) {
+                androidx.media3.common.MediaItem.fromUri(uri)
+            } else {
+                uri as androidx.media3.common.MediaItem
+            }
+            exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.prepare()
+            exoPlayer.play()
+            _playbackState.update {
+                it.copy(
+                    currentSong = song,
+                    isPlaying = true,
+                    duration = song.duration,
+                    currentPosition = 0L
+                )
+            }
+        } catch (e: Exception) {
+            _playbackState.update {
+                it.copy(error = "播放失败: ${e.message}", isLoading = false, isPlaying = false)
+            }
         }
     }
 
