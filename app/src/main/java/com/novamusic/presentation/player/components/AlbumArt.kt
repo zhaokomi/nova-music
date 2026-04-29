@@ -110,7 +110,7 @@ fun AlbumArt(
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     // Previous cover (fading out)
-                    AnimatedVisibility(
+                    androidx.compose.animation.AnimatedVisibility(
                         visible = coverTransition,
                         enter = fadeIn(animationSpec = tween(150)),
                         exit = fadeOut(animationSpec = tween(300))
