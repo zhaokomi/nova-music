@@ -1,0 +1,29 @@
+# Gradle
+.gradle
+/build
+/app/build
+/app/release
+/local.properties
+*.iml
+
+# Android Studio / IntelliJ
+/.idea
+/.vscode
+*.iws
+*.ipr
+*.ids
+
+# Keystore (NEVER commit!)
+*.keystore
+*.jks
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Native
+.externalNativeBuild
+.cxx
+
+# Generated
+captures
