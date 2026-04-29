@@ -1,2 +1,2 @@
 # NovaMusic
-Minimal CI test
+Test CRLF fix
