@@ -119,11 +119,11 @@ class MusicService : Service() {
             })
 
             val actions = PlaybackStateCompat.ACTION_PLAY
-                or PlaybackStateCompat.ACTION_PAUSE
-                or PlaybackStateCompat.ACTION_SKIP_TO_NEXT
-                or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
-                or PlaybackStateCompat.ACTION_SEEK_TO
-                or PlaybackStateCompat.ACTION_STOP
+                .or(PlaybackStateCompat.ACTION_PAUSE)
+                .or(PlaybackStateCompat.ACTION_SKIP_TO_NEXT)
+                .or(PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
+                .or(PlaybackStateCompat.ACTION_SEEK_TO)
+                .or(PlaybackStateCompat.ACTION_STOP)
 
             setPlaybackState(
                 PlaybackStateCompat.Builder()
