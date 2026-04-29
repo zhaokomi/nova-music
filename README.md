@@ -1,7 +1,5 @@
 # NovaMusic
 
-一款优雅的 Android 本地音乐播放器，基于 **Jetpack Compose** + **Material 3** 构建。
-Build status: CI running.
+Android local music player | Jetpack Compose + Material 3
 
-## 功能特性
-...
+Build: CI active
