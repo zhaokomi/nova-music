@@ -19,14 +19,16 @@ jobs:
       - run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-daemon 2>&1 | tee log.txt
+          echo "GRADLE_EXIT=$?" >> $GITHUB_ENV
         continue-on-error: true
+      - run: |
+          if [ "$GRADLE_EXIT" != "0" ]; then
+            echo "Gradle failed with exit $GRADLE_EXIT"
+            exit 1
+          fi
       - uses: actions/upload-artifact@v4
         if: always()
-        with:
-          name: log
-          path: log.txt
+        with: {name: log, path: log.txt}
       - uses: actions/upload-artifact@v4
-        if: success()
-        with:
-          name: apk
-          path: app/build/outputs/apk/debug/*.apk
+        if: always()
+        with: {name: apk, path: app/build/outputs/apk/debug/*.apk}
