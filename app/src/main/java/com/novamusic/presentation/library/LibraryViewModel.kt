@@ -219,14 +219,14 @@ class LibraryViewModel @Inject constructor(
             val result = withContext(Dispatchers.IO) {
                 importFilesUseCase(uris)
             }
-            result.onSuccess {
-                _uiState.update {
-                    it.copy(
+            result.onSuccess { importedIds ->
+                _uiState.update { state ->
+                    state.copy(
                         isImporting = false,
                         importProgress = ImportProgress(
                             scannedCount = uris.size,
-                            foundCount = it.size,
-                            importedCount = it.size,
+                            foundCount = importedIds.size,
+                            importedCount = importedIds.size,
                             isComplete = true
                         )
                     )
