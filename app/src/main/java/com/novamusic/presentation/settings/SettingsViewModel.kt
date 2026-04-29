@@ -27,17 +27,17 @@ class SettingsViewModel @Inject constructor(
         // Observe default play mode
         viewModelScope.launch {
             settingsRepository.getDefaultPlayMode()
-                .collect { _settingsState.update { it.copy(defaultPlayMode = it.value) } }
+                .collect { mode -> _settingsState.update { state -> state.copy(defaultPlayMode = mode) } }
         }
         // Default sleep timer
         viewModelScope.launch {
             settingsRepository.getDefaultSleepTimerMinutes()
-                .collect { _settingsState.update { it.copy(defaultSleepMinutes = it.value) } }
+                .collect { mins -> _settingsState.update { state -> state.copy(defaultSleepMinutes = mins) } }
         }
         // Notification style
         viewModelScope.launch {
             settingsRepository.getNotificationStyle()
-                .collect { _settingsState.update { it.copy(notificationStyle = it.value) } }
+                .collect { style -> _settingsState.update { state -> state.copy(notificationStyle = style) } }
         }
     }
 
