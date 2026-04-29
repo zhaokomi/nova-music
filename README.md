@@ -1,2 +1,2 @@
 # NovaMusic
-Android player
+Android
