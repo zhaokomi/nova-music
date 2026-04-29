@@ -57,7 +57,7 @@
             </intent-filter>
         </service>
 
-        <!-- 桌面小部件 4x2 -->
+        <!-- 桌面小部件 -->
         <receiver
             android:name=".presentation.widget.NovaWidgetProvider"
             android:exported="true">
@@ -67,18 +67,6 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/nova_widget_4x2" />
-        </receiver>
-
-        <!-- 桌面小部件 2x2 -->
-        <receiver
-            android:name=".presentation.widget.NovaWidgetProvider"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-            <meta-data
-                android:name="android.appwidget.provider"
-                android:resource="@xml/nova_widget_2x2" />
         </receiver>
 
     </application>
