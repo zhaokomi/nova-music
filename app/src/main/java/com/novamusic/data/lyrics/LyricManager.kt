@@ -111,20 +111,21 @@ object LyricManager {
     private fun extractLrcFromBytes(bytes: ByteArray): List<LyricLine> {
         // 搜索 [00: 的模式在二进制中
         val text = StringBuilder()
-        for (i in 0 until bytes.size - 6) {
-            if (bytes[i] == '['.code.toByte() &&
-                bytes[i+1] in '0'.code.toByte()..'9'.code.toByte() &&
-                bytes[i+2] in '0'.code.toByte()..'9'.code.toByte() &&
-                bytes[i+3] == ':'.code.toByte()) {
-                // 找到了一个可能的时间标记
-                var j = i
+        var idx = 0
+        while (idx < bytes.size - 6) {
+            if (bytes[idx] == '['.code.toByte() &&
+                bytes[idx+1] in '0'.code.toByte()..'9'.code.toByte() &&
+                bytes[idx+2] in '0'.code.toByte()..'9'.code.toByte() &&
+                bytes[idx+3] == ':'.code.toByte()) {
+                var j = idx
                 while (j < bytes.size && bytes[j] != 0.toByte()) {
                     text.append(bytes[j].toInt().toChar())
                     j++
                 }
                 text.append('\n')
-                i = j
+                idx = j
             }
+            idx++
         }
         if (text.isEmpty()) return emptyList()
         return parseLrc(text.toString())
