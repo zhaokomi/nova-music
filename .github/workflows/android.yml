@@ -26,13 +26,30 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
 
       - name: Create local.properties
-        run: |
-          echo "sdk.dir=$ANDROID_HOME" > local.properties
-          echo "ANDROID_HOME=$ANDROID_HOME"
-          echo "ANDROID_SDK_ROOT=$ANDROID_SDK_ROOT"
+        run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-      - name: Build debug APK
-        run: ./gradlew assembleDebug --no-daemon
+      - name: Build (logs saved)
+        id: build
+        run: ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle_build.log
+        continue-on-error: true
+
+      - name: Upload build log (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-build-log
+          path: gradle_build.log
+
+      - name: Check build result
+        if: always()
+        run: |
+          if grep -q "BUILD SUCCESSFUL" gradle_build.log; then
+            echo "BUILD SUCCESS!"
+          else
+            echo "BUILD FAILED"
+            tail -100 gradle_build.log
+            exit 1
+          fi
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
