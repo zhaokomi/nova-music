@@ -108,7 +108,7 @@ class MusicServiceConnection @Inject constructor(
             pendingCommands.clear()
             for (cmd in toExecute) {
                 Log.d(TAG, "  executing queued: $cmd")
-                s.executeCommand(cmd)
+                s.cmd(cmd)
             }
         }
     }
