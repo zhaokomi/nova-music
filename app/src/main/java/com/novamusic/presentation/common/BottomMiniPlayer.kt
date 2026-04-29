@@ -108,8 +108,7 @@ fun BottomMiniPlayer(
                 progress = { playbackState.progress },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(2.dp)
-                    .align(Alignment.TopCenter),
+                    .height(2.dp),
                 color = MaterialTheme.colorScheme.primary,
                 trackColor = Color.Transparent
             )
