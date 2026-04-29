@@ -34,17 +34,13 @@ import com.novamusic.presentation.player.components.PlayerControls
 import com.novamusic.presentation.player.components.SleepTimerDialog
 import com.novamusic.presentation.theme.ThemeViewModel
 import com.novamusic.presentation.theme.extractVibrantColor
+import com.novamusic.data.lyrics.LyricLine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 private const val TAG = "PlayerScreen"
-
-data class LyricLine(
-    val timeMs: Long,
-    val text: String
-)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,7 +85,7 @@ fun PlayerScreen(
                 accentColor = color
             }
             val lrcPath = song.filePath.replaceAfterLast('.', "lrc")
-            val parsed = withContext(Dispatchers.IO) { parseLrcFile(lrcPath) }
+            val parsed = withContext(Dispatchers.IO) { com.novamusic.data.lyrics.LyricManager.loadLyrics(song.filePath) }
             lyrics = parsed
         }
     }
@@ -422,21 +418,4 @@ private fun LyricContent(
             }
         }
     }
-}
-
-private fun parseLrcFile(filePath: String): List<LyricLine> {
-    return try {
-        val file = java.io.File(filePath)
-        if (!file.exists()) return emptyList()
-        val pattern = Regex("""\[(\d{2}):(\d{2})\.(\d{2,3})](.*)""")
-        file.readLines().mapNotNull { line ->
-            pattern.matchEntire(line.trim())?.let { m ->
-                val min = m.groupValues[1].toIntOrNull() ?: return@let null
-                val sec = m.groupValues[2].toIntOrNull() ?: return@let null
-                val msStr = m.groupValues[3]
-                val ms = (msStr.toIntOrNull() ?: return@let null) * (if (msStr.length == 2) 10 else 1)
-                LyricLine((min * 60 + sec) * 1000L + ms, m.groupValues[4].trim())
-            }
-        }.sortedBy { it.timeMs }
-    } catch (e: Exception) { emptyList() }
 }
