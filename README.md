@@ -1,2 +1,2 @@
 # NovaMusic
-Test CRLF fix
+dos2unix
