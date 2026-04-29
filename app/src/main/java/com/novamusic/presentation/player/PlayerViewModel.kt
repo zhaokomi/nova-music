@@ -1,5 +1,6 @@
 package com.novamusic.presentation.player
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.novamusic.domain.model.Song
@@ -12,9 +13,11 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
+private const val TAG = "PlayerVM"
+
 data class PlayerUiState(
     val playbackState: PlaybackState = PlaybackState(),
-    val sleepTimerMinutes: Int = -1, // -1 = no timer, other = remaining minutes
+    val sleepTimerMinutes: Int = -1,
     val isSleepTimerActive: Boolean = false
 )
 
@@ -35,6 +38,7 @@ class PlayerViewModel @Inject constructor(
     private fun observePlaybackState() {
         viewModelScope.launch {
             serviceConnection.getPlaybackState().collect { state ->
+                Log.d(TAG, "playbackState: isPlaying=${state.isPlaying} song=${state.currentSong?.title} queueSize=${state.queue.size}")
                 _uiState.update { it.copy(playbackState = state) }
 
                 // Record play when a new song starts playing
@@ -57,62 +61,75 @@ class PlayerViewModel @Inject constructor(
 
     // ---- Public Actions ----
 
-    /** Load a song by ID and play it (used when navigating from library) */
+    /**
+     * 核心修复: 点击歌曲时直接构建队列并播放
+     * 使用 serviceConnection 的命令排队机制，不依赖绑定时机
+     */
     fun loadAndPlaySong(songId: Long) {
         viewModelScope.launch {
-            val song = withContext(Dispatchers.IO) {
-                musicRepository.getSongById(songId)
-            }
-            if (song != null) {
-                // Get all songs sorted by the current library default (title asc)
-                val songList = withContext(Dispatchers.IO) {
-                    musicRepository.getAllSongs(
+            Log.i(TAG, "loadAndPlaySong: songId=$songId")
+            try {
+                // 1. 获取点击的歌曲
+                val song = withContext(Dispatchers.IO) {
+                    musicRepository.getSongById(songId)
+                }
+                if (song == null) {
+                    Log.w(TAG, "loadAndPlaySong: song not found for id=$songId")
+                    return@launch
+                }
+
+                // 2. 获取所有歌曲构建完整队列
+                val allSongs = withContext(Dispatchers.IO) {
+                    val flow = musicRepository.getAllSongs(
                         com.novamusic.domain.repository.SortOrder.TITLE_ASC
                     )
+                    // 用 first() 取一次快照
+                    flow.first()
                 }
-                val allSongs = withContext(Dispatchers.IO) {
-                    songList.first()
+
+                if (allSongs.isEmpty()) {
+                    Log.w(TAG, "loadAndPlaySong: no songs in library")
+                    // 至少播放这一首
+                    serviceConnection.play(song)
+                    return@launch
                 }
-                // Find index of the clicked song in the full list
+
+                // 3. 找到歌曲在列表中的位置
                 val index = allSongs.indexOfFirst { it.id == songId }.coerceAtLeast(0)
+                Log.i(TAG, "loadAndPlaySong: queuing ${allSongs.size} songs, playing index=$index '${allSongs[index].title}'")
+
+                // 4. 发送播放命令（serviceConnection 会排队直到绑定完成）
                 serviceConnection.playQueue(allSongs, index)
+            } catch (e: Exception) {
+                Log.e(TAG, "loadAndPlaySong failed: ${e.message}", e)
             }
         }
     }
 
+    /** 直接播放单首歌曲（不替换队列） */
     fun play(song: Song) {
+        Log.i(TAG, "play: ${song.title}")
         serviceConnection.play(song)
     }
 
+    /** 构建播放队列并从指定位置开始 */
     fun playQueue(songs: List<Song>, startIndex: Int = 0) {
+        Log.i(TAG, "playQueue: ${songs.size} songs, start=$startIndex")
+        if (songs.isEmpty()) return
         serviceConnection.playQueue(songs, startIndex)
     }
 
-    fun togglePlayPause() {
-        serviceConnection.togglePlayPause()
-    }
-
-    fun skipToNext() {
-        serviceConnection.skipToNext()
-    }
-
-    fun skipToPrevious() {
-        serviceConnection.skipToPrevious()
-    }
-
-    fun seekTo(position: Long) {
-        serviceConnection.seekTo(position)
-    }
+    fun togglePlayPause() = serviceConnection.togglePlayPause()
+    fun skipToNext() = serviceConnection.skipToNext()
+    fun skipToPrevious() = serviceConnection.skipToPrevious()
+    fun seekTo(position: Long) = serviceConnection.seekTo(position)
 
     fun cyclePlayMode() {
         val currentMode = _uiState.value.playbackState.playMode
-        val newMode = currentMode.next()
-        serviceConnection.setPlayMode(newMode)
+        serviceConnection.setPlayMode(currentMode.next())
     }
 
-    fun setPlayMode(mode: PlayMode) {
-        serviceConnection.setPlayMode(mode)
-    }
+    fun setPlayMode(mode: PlayMode) = serviceConnection.setPlayMode(mode)
 
     fun removeFromQueue(index: Int) {
         serviceConnection.sendCommand(PlayerCommand.RemoveFromQueue(index))
@@ -134,8 +151,6 @@ class PlayerViewModel @Inject constructor(
     fun setSleepTimer(minutes: Int) {
         serviceConnection.setSleepTimer(minutes)
         _uiState.update { it.copy(sleepTimerMinutes = minutes, isSleepTimerActive = true) }
-
-        // Countdown
         viewModelScope.launch {
             var remaining = minutes
             while (remaining > 0 && _uiState.value.isSleepTimerActive) {
@@ -157,6 +172,5 @@ class PlayerViewModel @Inject constructor(
     override fun onCleared() {
         super.onCleared()
         serviceConnection.unbind()
-        // Don't stop service - allow background playback
     }
 }
