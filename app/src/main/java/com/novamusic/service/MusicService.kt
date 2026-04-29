@@ -131,12 +131,12 @@ class MusicService : Service() {
                 override fun onSeekTo(pos: Long) = executeCommand(PlayerCommand.SeekTo(pos))
             })
 
-            val actions = PlaybackStateCompat.ACTION_PLAY.toLong()
-                or PlaybackStateCompat.ACTION_PAUSE.toLong()
-                or PlaybackStateCompat.ACTION_SKIP_TO_NEXT.toLong()
-                or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS.toLong()
-                or PlaybackStateCompat.ACTION_SEEK_TO.toLong()
-                or PlaybackStateCompat.ACTION_STOP.toLong()
+            val actions = PlaybackStateCompat.ACTION_PLAY
+                .or(PlaybackStateCompat.ACTION_PAUSE)
+                .or(PlaybackStateCompat.ACTION_SKIP_TO_NEXT)
+                .or(PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
+                .or(PlaybackStateCompat.ACTION_SEEK_TO)
+                .or(PlaybackStateCompat.ACTION_STOP)
 
             setPlaybackState(
                 PlaybackStateCompat.Builder()
@@ -413,11 +413,11 @@ class MusicService : Service() {
                     state.currentPosition, 1f
                 )
                 .setActions(
-                    PlaybackStateCompat.ACTION_PLAY.toLong()
-                        or PlaybackStateCompat.ACTION_PAUSE.toLong()
-                        or PlaybackStateCompat.ACTION_SKIP_TO_NEXT.toLong()
-                        or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS.toLong()
-                        or PlaybackStateCompat.ACTION_SEEK_TO.toLong()
+                    PlaybackStateCompat.ACTION_PLAY
+                        .or(PlaybackStateCompat.ACTION_PAUSE)
+                        .or(PlaybackStateCompat.ACTION_SKIP_TO_NEXT)
+                        .or(PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
+                        .or(PlaybackStateCompat.ACTION_SEEK_TO)
                 )
                 .build()
         )
