@@ -20,7 +20,7 @@ jobs:
           sdkmanager "platforms;android-34" "build-tools;34.0.0"
       - run: echo "sdk.dir=$ANDROID_HOME" > local.properties
       - run: |
-          sed -i 's/$//' gradlew
+          dos2unix gradlew
           chmod +x gradlew
           set -o pipefail
           ./gradlew assembleDebug --no-daemon 2>&1 | tee log.txt
