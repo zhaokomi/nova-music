@@ -7,11 +7,12 @@ import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.Binder
 import android.os.IBinder
+import android.util.Log
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
-import androidx.media.app.NotificationCompat as MediaNotificationCompat
 import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -28,9 +29,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import java.io.File
 import javax.inject.Inject
-import javax.inject.Singleton
-import kotlin.random.Random
+
+private const val TAG = "MusicService"
 
 @AndroidEntryPoint
 class MusicService : Service() {
@@ -57,6 +59,7 @@ class MusicService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        Log.i(TAG, "onCreate: initializing ExoPlayer")
         initExoPlayer()
         initMediaSession()
         startPositionUpdates()
@@ -75,9 +78,10 @@ class MusicService : Service() {
             .build()
 
         exoPlayer.addListener(object : Player.Listener {
-            override fun onPlaybackStateChanged(playbackState: Int) {
+            override fun onPlaybackStateChanged(state: Int) {
+                Log.d(TAG, "onPlaybackStateChanged: $state")
                 updatePlaybackState()
-                when (playbackState) {
+                when (state) {
                     Player.STATE_READY -> {
                         _playbackState.update { it.copy(isLoading = false) }
                         updateMediaSessionState()
@@ -88,10 +92,12 @@ class MusicService : Service() {
                     Player.STATE_ENDED -> {
                         handlePlaybackEnded()
                     }
+                    Player.STATE_IDLE -> { }
                 }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
+                Log.d(TAG, "onIsPlayingChanged: $isPlaying")
                 updatePlaybackState()
                 updateMediaSessionState()
                 if (isPlaying) {
@@ -103,8 +109,13 @@ class MusicService : Service() {
             }
 
             override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                Log.e(TAG, "onPlayerError: ${error.message}", error)
                 _playbackState.update {
-                    it.copy(error = error.message, isLoading = false, isPlaying = false)
+                    it.copy(
+                        error = "播放错误: ${error.localizedMessage ?: error.message}",
+                        isLoading = false,
+                        isPlaying = false
+                    )
                 }
             }
         })
@@ -120,12 +131,12 @@ class MusicService : Service() {
                 override fun onSeekTo(pos: Long) = executeCommand(PlayerCommand.SeekTo(pos))
             })
 
-            val actions = PlaybackStateCompat.ACTION_PLAY
-                .or(PlaybackStateCompat.ACTION_PAUSE)
-                .or(PlaybackStateCompat.ACTION_SKIP_TO_NEXT)
-                .or(PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS)
-                .or(PlaybackStateCompat.ACTION_SEEK_TO)
-                .or(PlaybackStateCompat.ACTION_STOP)
+            val actions = PlaybackStateCompat.ACTION_PLAY.toLong()
+                or PlaybackStateCompat.ACTION_PAUSE.toLong()
+                or PlaybackStateCompat.ACTION_SKIP_TO_NEXT.toLong()
+                or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS.toLong()
+                or PlaybackStateCompat.ACTION_SEEK_TO.toLong()
+                or PlaybackStateCompat.ACTION_STOP.toLong()
 
             setPlaybackState(
                 PlaybackStateCompat.Builder()
@@ -146,7 +157,7 @@ class MusicService : Service() {
                         it.copy(currentPosition = exoPlayer.currentPosition)
                     }
                 }
-                delay(250) // Update 4 times per second
+                delay(250)
             }
         }
     }
@@ -154,6 +165,7 @@ class MusicService : Service() {
     // ---- Command Handling ----
 
     fun executeCommand(command: PlayerCommand) {
+        Log.d(TAG, "executeCommand: $command")
         when (command) {
             is PlayerCommand.Play -> playSong(command.song)
             is PlayerCommand.PlayQueue -> playQueue(command.songs, command.startIndex)
@@ -169,7 +181,7 @@ class MusicService : Service() {
     }
 
     private fun playSong(song: Song) {
-        // Add to queue if not already there
+        Log.i(TAG, "playSong: ${song.title} | path=${song.filePath}")
         val currentQueue = _playbackState.value.queue.toMutableList()
         val existingIndex = currentQueue.indexOfFirst { it.id == song.id }
         if (existingIndex >= 0) {
@@ -184,11 +196,11 @@ class MusicService : Service() {
     }
 
     private fun playQueue(songs: List<Song>, startIndex: Int) {
-        _playbackState.update {
-            it.copy(queue = songs, currentIndex = startIndex.coerceIn(0, songs.size - 1))
-        }
+        Log.i(TAG, "playQueue: ${songs.size} songs, startIndex=$startIndex")
+        val idx = startIndex.coerceIn(0, (songs.size - 1).coerceAtLeast(0))
+        _playbackState.update { it.copy(queue = songs, currentIndex = idx) }
         if (songs.isNotEmpty()) {
-            loadAndPlay(songs[startIndex.coerceIn(0, songs.size - 1)])
+            loadAndPlay(songs[idx])
             startForegroundWithNotification()
         }
     }
@@ -200,20 +212,13 @@ class MusicService : Service() {
         loadAndPlay(state.queue[index])
     }
 
+    /**
+     * 核心修复: 正确处理 content://, file:// 和本地绝对路径
+     */
     private fun loadAndPlay(song: Song) {
+        Log.i(TAG, "loadAndPlay: ${song.title} | path=${song.filePath}")
         try {
-            val path = song.filePath
-            val uri = if (path.startsWith("content://") || path.startsWith("file://")) {
-                android.net.Uri.parse(path)
-            } else {
-                // Local absolute path
-                androidx.media3.common.MediaItem.fromUri(path)
-            }
-            val mediaItem = if (uri is android.net.Uri) {
-                androidx.media3.common.MediaItem.fromUri(uri)
-            } else {
-                uri as androidx.media3.common.MediaItem
-            }
+            val mediaItem = buildMediaItem(song.filePath)
             exoPlayer.setMediaItem(mediaItem)
             exoPlayer.prepare()
             exoPlayer.play()
@@ -222,12 +227,46 @@ class MusicService : Service() {
                     currentSong = song,
                     isPlaying = true,
                     duration = song.duration,
-                    currentPosition = 0L
+                    currentPosition = 0L,
+                    error = null
                 )
             }
         } catch (e: Exception) {
+            Log.e(TAG, "loadAndPlay failed: ${e.message}", e)
             _playbackState.update {
                 it.copy(error = "播放失败: ${e.message}", isLoading = false, isPlaying = false)
+            }
+        }
+    }
+
+    /**
+     * 根据不同的文件路径类型构建 MediaItem
+     */
+    private fun buildMediaItem(filePath: String): MediaItem {
+        return when {
+            filePath.startsWith("content://") -> {
+                // SAF content URI - use directly
+                val uri = Uri.parse(filePath)
+                MediaItem.fromUri(uri)
+            }
+            filePath.startsWith("file://") -> {
+                // File URI
+                val uri = Uri.parse(filePath)
+                MediaItem.fromUri(uri)
+            }
+            filePath.startsWith("/") -> {
+                // Absolute file path
+                val file = File(filePath)
+                if (file.exists()) {
+                    MediaItem.fromUri(Uri.fromFile(file))
+                } else {
+                    Log.w(TAG, "File not found: $filePath")
+                    MediaItem.fromUri(filePath)
+                }
+            }
+            else -> {
+                // Fallback: try as raw path
+                MediaItem.fromUri(filePath)
             }
         }
     }
@@ -248,7 +287,6 @@ class MusicService : Service() {
     private fun skipToNext() {
         val state = _playbackState.value
         if (state.queue.isEmpty()) return
-
         val nextIndex = when (state.playMode) {
             PlayMode.REPEAT_ONE -> state.currentIndex
             PlayMode.SHUFFLE -> {
@@ -260,10 +298,7 @@ class MusicService : Service() {
                 shuffleIndices[nextShuffleIndex]
             }
             PlayMode.SEQUENTIAL -> {
-                if (state.currentIndex + 1 >= state.queue.size) {
-                    stop()
-                    return
-                }
+                if (state.currentIndex + 1 >= state.queue.size) { stop(); return }
                 state.currentIndex + 1
             }
             PlayMode.REPEAT_ALL -> (state.currentIndex + 1) % state.queue.size
@@ -274,14 +309,11 @@ class MusicService : Service() {
     private fun skipToPrevious() {
         val state = _playbackState.value
         if (state.queue.isEmpty()) return
-
-        // If played more than 3 seconds, restart current song
         if (exoPlayer.currentPosition > 3000) {
             exoPlayer.seekTo(0)
             exoPlayer.play()
             return
         }
-
         val prevIndex = when (state.playMode) {
             PlayMode.REPEAT_ONE -> state.currentIndex
             PlayMode.SHUFFLE -> {
@@ -314,15 +346,11 @@ class MusicService : Service() {
         val state = _playbackState.value
         val newQueue = state.queue.toMutableList()
         if (index < 0 || index >= newQueue.size) return
-
         newQueue.removeAt(index)
         val newIndex = when {
             index < state.currentIndex -> state.currentIndex - 1
             index == state.currentIndex -> {
-                if (newQueue.isEmpty()) {
-                    stop()
-                    return
-                }
+                if (newQueue.isEmpty()) { stop(); return }
                 playAtIndex(index.coerceIn(0, newQueue.size - 1))
                 index.coerceIn(0, newQueue.size - 1)
             }
@@ -334,19 +362,15 @@ class MusicService : Service() {
     private fun moveQueueItem(fromIndex: Int, toIndex: Int) {
         val state = _playbackState.value
         val newQueue = state.queue.toMutableList()
-        if (fromIndex < 0 || fromIndex >= newQueue.size) return
-        if (toIndex < 0 || toIndex >= newQueue.size) return
-
+        if (fromIndex !in newQueue.indices || toIndex !in newQueue.indices) return
         val item = newQueue.removeAt(fromIndex)
         newQueue.add(toIndex, item)
-
         val newCurrentIndex = when {
             state.currentIndex == fromIndex -> toIndex
             fromIndex < state.currentIndex && toIndex >= state.currentIndex -> state.currentIndex - 1
             fromIndex > state.currentIndex && toIndex <= state.currentIndex -> state.currentIndex + 1
             else -> state.currentIndex
         }
-
         _playbackState.update { it.copy(queue = newQueue, currentIndex = newCurrentIndex) }
     }
 
@@ -364,12 +388,8 @@ class MusicService : Service() {
                 exoPlayer.seekTo(0)
                 exoPlayer.play()
             }
-            PlayMode.SEQUENTIAL -> {
-                skipToNext()
-            }
-            else -> {
-                skipToNext()
-            }
+            PlayMode.SEQUENTIAL -> skipToNext()
+            else -> skipToNext()
         }
     }
 
@@ -390,15 +410,14 @@ class MusicService : Service() {
                 .setState(
                     if (state.isPlaying) PlaybackStateCompat.STATE_PLAYING
                     else PlaybackStateCompat.STATE_PAUSED,
-                    state.currentPosition,
-                    1f
+                    state.currentPosition, 1f
                 )
                 .setActions(
-                    PlaybackStateCompat.ACTION_PLAY
-                        or PlaybackStateCompat.ACTION_PAUSE
-                        or PlaybackStateCompat.ACTION_SKIP_TO_NEXT
-                        or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
-                        or PlaybackStateCompat.ACTION_SEEK_TO
+                    PlaybackStateCompat.ACTION_PLAY.toLong()
+                        or PlaybackStateCompat.ACTION_PAUSE.toLong()
+                        or PlaybackStateCompat.ACTION_SKIP_TO_NEXT.toLong()
+                        or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS.toLong()
+                        or PlaybackStateCompat.ACTION_SEEK_TO.toLong()
                 )
                 .build()
         )
@@ -407,56 +426,35 @@ class MusicService : Service() {
     // ---- Notification ----
 
     private fun startForegroundWithNotification() {
-        startForeground(
-            NovaMusicApp.PLAYBACK_NOTIFICATION_ID,
-            buildNotification()
-        )
+        startForeground(NovaMusicApp.PLAYBACK_NOTIFICATION_ID, buildNotification())
     }
 
     private fun updateNotification() {
-        val manager = getSystemService(android.app.NotificationManager::class.java)
-        manager.notify(NovaMusicApp.PLAYBACK_NOTIFICATION_ID, buildNotification())
+        getSystemService(android.app.NotificationManager::class.java)
+            .notify(NovaMusicApp.PLAYBACK_NOTIFICATION_ID, buildNotification())
     }
 
     private fun buildNotification(): Notification {
         val state = _playbackState.value
         val song = state.currentSong
 
-        // Play/Pause intent
-        val toggleIntent = Intent(this, MusicService::class.java).apply {
-            action = "ACTION_TOGGLE"
-        }
-        val togglePending = PendingIntent.getService(
-            this, 0, toggleIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val toggleIntent = Intent(this, MusicService::class.java).apply { action = "ACTION_TOGGLE" }
+        val togglePending = PendingIntent.getService(this, 0, toggleIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        // Next intent
-        val nextIntent = Intent(this, MusicService::class.java).apply {
-            action = "ACTION_NEXT"
-        }
-        val nextPending = PendingIntent.getService(
-            this, 1, nextIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val nextIntent = Intent(this, MusicService::class.java).apply { action = "ACTION_NEXT" }
+        val nextPending = PendingIntent.getService(this, 1, nextIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        // Previous intent
-        val prevIntent = Intent(this, MusicService::class.java).apply {
-            action = "ACTION_PREV"
-        }
-        val prevPending = PendingIntent.getService(
-            this, 2, prevIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val prevIntent = Intent(this, MusicService::class.java).apply { action = "ACTION_PREV" }
+        val prevPending = PendingIntent.getService(this, 2, prevIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        // Content intent (open app)
         val contentIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_SINGLE_TOP
         }
-        val contentPending = PendingIntent.getActivity(
-            this, 3, contentIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        val contentPending = PendingIntent.getActivity(this, 3, contentIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         return NotificationCompat.Builder(this, NovaMusicApp.PLAYBACK_CHANNEL_ID)
             .setContentTitle(song?.title ?: "NovaMusic")
@@ -472,7 +470,7 @@ class MusicService : Service() {
             .addAction(R.drawable.ic_prev, "上一曲", prevPending)
             .addAction(R.drawable.ic_next, "下一曲", nextPending)
             .setStyle(
-                MediaNotificationCompat.MediaStyle()
+                androidx.media.app.NotificationCompat.MediaStyle()
                     .setMediaSession(mediaSession.sessionToken)
                     .setShowActionsInCompactView(0, 1, 2)
             )
@@ -484,11 +482,7 @@ class MusicService : Service() {
 
     private fun loadAlbumArtBitmap(path: String?): Bitmap? {
         if (path.isNullOrBlank()) return null
-        return try {
-            BitmapFactory.decodeFile(path)
-        } catch (e: Exception) {
-            null
-        }
+        return try { BitmapFactory.decodeFile(path) } catch (e: Exception) { null }
     }
 
     // ---- Service Lifecycle ----
@@ -515,7 +509,6 @@ class MusicService : Service() {
     fun setSleepTimer(minutes: Int) {
         sleepTimerJob?.cancel()
         if (minutes <= 0) return
-
         sleepTimerJob = CoroutineScope(Dispatchers.Main).launch {
             delay(minutes * 60 * 1000L)
             exoPlayer.pause()
