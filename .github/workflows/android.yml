@@ -10,38 +10,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Fix line endings
-        run: |
-          tr -d '' < gradlew > gradlew_fixed && mv gradlew_fixed gradlew
-          chmod +x gradlew
-          file gradlew
-          head -1 gradlew | od -c
-
       - uses: actions/setup-java@v4
         with:
-          java-version: "17"
+          java-version: 17
           distribution: temurin
-
       - uses: android-actions/setup-android@v3
-
-      - run: |
+      - name: SDK
+        run: |
           yes | sdkmanager --licenses || true
-          sdkmanager "platforms;android-34" "build-tools;34.0.0"
-
-      - run: echo "sdk.dir=$ANDROID_HOME" > local.properties
-
-      - run: ./gradlew assembleDebug --no-daemon > log.txt 2>&1
+          sdkmanager platforms;android-34 build-tools;34.0.0
+      - name: Props
+        run: echo sdk.dir=$ANDROID_HOME > local.properties
+      - name: Build
+        run: |
+          hexdump -C gradlew | head -5
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon > log.txt 2>&1
         continue-on-error: true
-
-      - run: cat log.txt
-
+      - name: Show log
+        run: cat log.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: log
           path: log.txt
-
       - uses: actions/upload-artifact@v4
         if: always()
         with:
