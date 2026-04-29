@@ -18,14 +18,9 @@ jobs:
       - run: echo "sdk.dir=$ANDROID_HOME" > local.properties
       - run: |
           chmod +x gradlew
+          set -o pipefail
           ./gradlew assembleDebug --no-daemon 2>&1 | tee log.txt
-          echo "GRADLE_EXIT=$?" >> $GITHUB_ENV
-        continue-on-error: true
-      - run: |
-          if [ "$GRADLE_EXIT" != "0" ]; then
-            echo "Gradle failed with exit $GRADLE_EXIT"
-            exit 1
-          fi
+        shell: bash
       - uses: actions/upload-artifact@v4
         if: always()
         with: {name: log, path: log.txt}
