@@ -13,17 +13,25 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.novamusic.presentation.theme.ThemeMode
 import com.novamusic.presentation.theme.ThemeViewModel
+import com.novamusic.service.PlayMode
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     onNavigateToAbout: () -> Unit,
-    themeViewModel: ThemeViewModel = hiltViewModel()
+    themeViewModel: ThemeViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel()
 ) {
     val themeSettings by themeViewModel.themeSettings.collectAsStateWithLifecycle()
+    val settingsState by settingsViewModel.settingsState.collectAsStateWithLifecycle()
     var showThemeDialog by remember { mutableStateOf(false) }
+    var showPlayModeDialog by remember { mutableStateOf(false) }
+    var showSleepDialog by remember { mutableStateOf(false) }
+    var showNotifStyleDialog by remember { mutableStateOf(false) }
+    var showHeadphoneSettings by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -74,17 +82,35 @@ fun SettingsScreen(
             // ---- Playback Section ----
             SettingsSectionHeader("播放")
 
+            // Default play mode
             ListItem(
                 headlineContent = { Text("默认播放模式") },
-                supportingContent = { Text("顺序播放") },
-                leadingContent = { Icon(Icons.Default.Repeat, contentDescription = null) }
+                supportingContent = {
+                    Text(
+                        when (settingsState.defaultPlayMode) {
+                            0 -> "顺序播放"
+                            1 -> "列表循环"
+                            2 -> "随机播放"
+                            3 -> "单曲循环"
+                            else -> "顺序播放"
+                        }
+                    )
+                },
+                leadingContent = { Icon(Icons.Default.Repeat, contentDescription = null) },
+                modifier = Modifier.clickable { showPlayModeDialog = true }
             )
 
+            // Pause on headphone unplug
             ListItem(
                 headlineContent = { Text("拔出耳机暂停") },
                 supportingContent = { Text("拔出耳机时自动暂停播放") },
                 leadingContent = { Icon(Icons.Default.Headphones, contentDescription = null) },
-                trailingContent = { Switch(checked = true, onCheckedChange = {}) }
+                trailingContent = {
+                    Switch(
+                        checked = settingsState.pauseOnHeadphoneUnplug,
+                        onCheckedChange = { settingsViewModel.setPauseOnHeadphoneUnplug(it) }
+                    )
+                }
             )
 
             HorizontalDivider()
@@ -94,8 +120,15 @@ fun SettingsScreen(
 
             ListItem(
                 headlineContent = { Text("默认时长") },
-                supportingContent = { Text("30 分钟") },
-                leadingContent = { Icon(Icons.Default.Bedtime, contentDescription = null) }
+                supportingContent = {
+                    Text(
+                        if (settingsState.defaultSleepMinutes > 0)
+                            "${settingsState.defaultSleepMinutes} 分钟"
+                        else "关闭"
+                    )
+                },
+                leadingContent = { Icon(Icons.Default.Bedtime, contentDescription = null) },
+                modifier = Modifier.clickable { showSleepDialog = true }
             )
 
             HorizontalDivider()
@@ -122,8 +155,17 @@ fun SettingsScreen(
 
             ListItem(
                 headlineContent = { Text("通知样式") },
-                supportingContent = { Text("紧凑") },
-                leadingContent = { Icon(Icons.Default.Notifications, contentDescription = null) }
+                supportingContent = {
+                    Text(
+                        when (settingsState.notificationStyle) {
+                            0 -> "紧凑"
+                            1 -> "展开"
+                            else -> "紧凑"
+                        }
+                    )
+                },
+                leadingContent = { Icon(Icons.Default.Notifications, contentDescription = null) },
+                modifier = Modifier.clickable { showNotifStyleDialog = true }
             )
 
             HorizontalDivider()
@@ -139,6 +181,8 @@ fun SettingsScreen(
             )
         }
     }
+
+    // ---- Dialogs ----
 
     // Theme selection dialog
     if (showThemeDialog) {
@@ -180,6 +224,120 @@ fun SettingsScreen(
             },
             confirmButton = {
                 TextButton(onClick = { showThemeDialog = false }) { Text("关闭") }
+            }
+        )
+    }
+
+    // Play mode dialog
+    if (showPlayModeDialog) {
+        val modes = listOf("顺序播放" to 0, "列表循环" to 1, "随机播放" to 2, "单曲循环" to 3)
+        AlertDialog(
+            onDismissRequest = { showPlayModeDialog = false },
+            title = { Text("默认播放模式") },
+            text = {
+                Column {
+                    modes.forEach { (label, value) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    settingsViewModel.setDefaultPlayMode(value)
+                                    showPlayModeDialog = false
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = settingsState.defaultPlayMode == value,
+                                onClick = {
+                                    settingsViewModel.setDefaultPlayMode(value)
+                                    showPlayModeDialog = false
+                                }
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(label)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showPlayModeDialog = false }) { Text("关闭") }
+            }
+        )
+    }
+
+    // Sleep timer dialog
+    if (showSleepDialog) {
+        val options = listOf(0 to "关闭", 15 to "15 分钟", 30 to "30 分钟", 45 to "45 分钟", 60 to "60 分钟", 90 to "90 分钟")
+        AlertDialog(
+            onDismissRequest = { showSleepDialog = false },
+            title = { Text("睡眠定时器默认时长") },
+            text = {
+                Column {
+                    options.forEach { (minutes, label) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    settingsViewModel.setDefaultSleepTimer(minutes)
+                                    showSleepDialog = false
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = settingsState.defaultSleepMinutes == minutes,
+                                onClick = {
+                                    settingsViewModel.setDefaultSleepTimer(minutes)
+                                    showSleepDialog = false
+                                }
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(label)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showSleepDialog = false }) { Text("关闭") }
+            }
+        )
+    }
+
+    // Notification style dialog
+    if (showNotifStyleDialog) {
+        val styles = listOf("紧凑" to 0, "展开" to 1)
+        AlertDialog(
+            onDismissRequest = { showNotifStyleDialog = false },
+            title = { Text("通知栏样式") },
+            text = {
+                Column {
+                    styles.forEach { (label, value) ->
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    settingsViewModel.setNotificationStyle(value)
+                                    showNotifStyleDialog = false
+                                }
+                                .padding(vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(
+                                selected = settingsState.notificationStyle == value,
+                                onClick = {
+                                    settingsViewModel.setNotificationStyle(value)
+                                    showNotifStyleDialog = false
+                                }
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            Text(label)
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showNotifStyleDialog = false }) { Text("关闭") }
             }
         )
     }
