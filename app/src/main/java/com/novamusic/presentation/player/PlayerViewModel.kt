@@ -57,6 +57,29 @@ class PlayerViewModel @Inject constructor(
 
     // ---- Public Actions ----
 
+    /** Load a song by ID and play it (used when navigating from library) */
+    fun loadAndPlaySong(songId: Long) {
+        viewModelScope.launch {
+            val song = withContext(Dispatchers.IO) {
+                musicRepository.getSongById(songId)
+            }
+            if (song != null) {
+                // Get all songs sorted by the current library default (title asc)
+                val songList = withContext(Dispatchers.IO) {
+                    musicRepository.getAllSongs(
+                        com.novamusic.domain.repository.SortOrder.TITLE_ASC
+                    )
+                }
+                val allSongs = withContext(Dispatchers.IO) {
+                    songList.first()
+                }
+                // Find index of the clicked song in the full list
+                val index = allSongs.indexOfFirst { it.id == songId }.coerceAtLeast(0)
+                serviceConnection.playQueue(allSongs, index)
+            }
+        }
+    }
+
     fun play(song: Song) {
         serviceConnection.play(song)
     }
