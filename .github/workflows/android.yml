@@ -10,14 +10,11 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-java@v4
         with:
           java-version: 17
           distribution: temurin
-
       - uses: gradle/actions/setup-gradle@v3
-
       - uses: android-actions/setup-android@v3
 
       - name: Install SDK components
@@ -28,30 +25,13 @@ jobs:
       - name: Create local.properties
         run: echo "sdk.dir=$ANDROID_HOME" > local.properties
 
-      - name: Build (logs saved)
-        id: build
-        run: ./gradlew assembleDebug --no-daemon --stacktrace 2>&1 | tee gradle_build.log
-        continue-on-error: true
-
-      - name: Upload build log (always)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: gradle-build-log
-          path: gradle_build.log
-
-      - name: Check build result
-        if: always()
+      - name: Build debug APK
         run: |
-          if grep -q "BUILD SUCCESSFUL" gradle_build.log; then
-            echo "BUILD SUCCESS!"
-          else
-            echo "BUILD FAILED"
-            tail -100 gradle_build.log
-            exit 1
-          fi
+          ./gradlew assembleDebug --no-daemon --stacktrace 2>&1
+          echo "EXIT_CODE=$?" >> $GITHUB_ENV
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: nova-music-debug
