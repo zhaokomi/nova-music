@@ -1,2 +1,2 @@
 # NovaMusic
-Android local music player
+Android player
