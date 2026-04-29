@@ -11,6 +11,7 @@ import android.os.Binder
 import android.os.IBinder
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import androidx.media.app.NotificationCompat as MediaNotificationCompat
 import androidx.core.app.NotificationCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -453,7 +454,7 @@ class MusicService : Service() {
             .addAction(R.drawable.ic_prev, "上一曲", prevPending)
             .addAction(R.drawable.ic_next, "下一曲", nextPending)
             .setStyle(
-                androidx.media.app.NotificationCompat.MediaStyle()
+                MediaNotificationCompat.MediaStyle()
                     .setMediaSession(mediaSession.sessionToken)
                     .setShowActionsInCompactView(0, 1, 2)
             )
@@ -487,7 +488,6 @@ class MusicService : Service() {
         positionUpdateJob?.cancel()
         sleepTimerJob?.cancel()
         exoPlayer.release()
-        mediaSession.isActive = false
         mediaSession.release()
         super.onDestroy()
     }
