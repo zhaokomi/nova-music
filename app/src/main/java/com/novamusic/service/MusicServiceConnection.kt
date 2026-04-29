@@ -37,7 +37,7 @@ class MusicServiceConnection @Inject constructor(
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             Log.i(TAG, "onServiceConnected")
-            service = (binder as MusicService.LocalBinder).getService()
+            service = (binder as MusicService.LocalBinder).svc()
             isBound = true
             _isConnected.value = true
             // 执行所有排队的命令
@@ -77,7 +77,7 @@ class MusicServiceConnection @Inject constructor(
         val s = service
         if (s != null && isBound) {
             Log.d(TAG, "sendCommand: $command (immediate)")
-            s.executeCommand(command)
+            s.cmd(command)
         } else {
             Log.d(TAG, "sendCommand: $command (queued, not yet bound)")
             synchronized(pendingCommands) {
