@@ -19,16 +19,3 @@ sealed class PlayerState {
     data object Error : PlayerState()
 }
 
-/**
- * Playback mode enum.
- */
-enum class PlayMode(val value: Int) {
-    SEQUENTIAL(0),    // 顺序播放
-    REPEAT_ALL(1),    // 列表循环
-    SHUFFLE(2),       // 随机播放
-    REPEAT_ONE(3);    // 单曲循环
-
-    companion object {
-        fun fromValue(value: Int): PlayMode = entries.find { it.value == value } ?: SEQUENTIAL
-    }
-}
