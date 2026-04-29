@@ -1,2 +1,2 @@
 # NovaMusic
-dos2unix
+Android local music player
