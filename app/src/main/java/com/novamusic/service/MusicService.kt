@@ -92,7 +92,7 @@ class MusicService : Service() {
         is PlayerCommand.SkipToNext -> skipN()
         is PlayerCommand.SkipToPrevious -> skipP()
         is PlayerCommand.SeekTo -> { player.seekTo(c.position); _s.update { it.copy(currentPosition = c.position) } }
-        is PlayerCommand.SetPlayMode -> { _s.update { it.copy(playMode = c.mode) }; if (c.mode == PlayMode.SHUFFLE) shuf = _s.value.queue.indices.shuffled() }
+        is PlayerCommand.SetPlayMode -> { _s.update { it.copy(playMode = c.mode) }; if (c.mode == PlayMode.SHUFFLE) shuf = _s.value.queue.indices.shuffled(); Unit }
         is PlayerCommand.RemoveFromQueue -> rmQ(c.index)
         is PlayerCommand.MoveQueueItem -> mvQ(c.fromIndex, c.toIndex)
         is PlayerCommand.Stop -> stop()
