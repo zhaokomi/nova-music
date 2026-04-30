@@ -37,7 +37,7 @@ class MusicServiceConnection @Inject constructor(
     private val serviceConnection = object : ServiceConnection {
         override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
             Log.i(TAG, "onServiceConnected")
-            service = (binder as MusicService.LocalBinder).svc()
+            service = (binder as MusicService.Bnd).s()
             isBound = true
             _isConnected.value = true
             // 执行所有排队的命令
@@ -77,7 +77,7 @@ class MusicServiceConnection @Inject constructor(
         val s = service
         if (s != null && isBound) {
             Log.d(TAG, "sendCommand: $command (immediate)")
-            s.cmd(command)
+            s.exec(command)
         } else {
             Log.d(TAG, "sendCommand: $command (queued, not yet bound)")
             synchronized(pendingCommands) {
@@ -108,7 +108,7 @@ class MusicServiceConnection @Inject constructor(
             pendingCommands.clear()
             for (cmd in toExecute) {
                 Log.d(TAG, "  executing queued: $cmd")
-                s.cmd(cmd)
+                s.exec(cmd)
             }
         }
     }
@@ -139,7 +139,7 @@ class MusicServiceConnection @Inject constructor(
     }
 
     fun getPlaybackState(): StateFlow<PlaybackState> {
-        return service?.playbackState ?: MutableStateFlow(PlaybackState()).asStateFlow()
+        return service?.pState ?: MutableStateFlow(PlaybackState()).asStateFlow()
     }
 
     // ---- 便捷方法 ----
