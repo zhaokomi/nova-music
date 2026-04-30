@@ -25,6 +25,9 @@ sealed class NavRoutes(val route: String) {
     data object Favorites : NavRoutes("favorites")
     data object Settings : NavRoutes("settings")
     data object Profile : NavRoutes("profile")
+    data object Stats : NavRoutes("stats")
+    data object Cache : NavRoutes("cache")
+    data object PlayHistory : NavRoutes("play_history")
     data object About : NavRoutes("about")
 }
 
