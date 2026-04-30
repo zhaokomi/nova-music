@@ -101,13 +101,14 @@ fun NovaNavHost() {
                     onNavigateToHistory = { nav.navigate(NavRoutes.PlayHistory.route) },
                     onNavigateToStats = { nav.navigate(NavRoutes.Stats.route) },
                     onNavigateToCache = { nav.navigate(NavRoutes.Cache.route) },
-                    onNavigateToSettings = { nav.navigate(NavRoutes.Settings.route) },
-                    onNavigateToAppearance = { nav.navigate(NavRoutes.Settings.route) },
-                    onNavigateToPlayback = { nav.navigate(NavRoutes.Settings.route) },
-                    onNavigateToSleepTimer = { nav.navigate(NavRoutes.Settings.route) },
-                    onNavigateToStorage = { nav.navigate(NavRoutes.Settings.route) },
-                    onNavigateToNotification = { nav.navigate(NavRoutes.Settings.route) },
-                    onNavigateToAbout = { nav.navigate(NavRoutes.About.route) })
+                    onNavigateToAppearance = { nav.navigate(NavRoutes.Appearance.route) },
+                    onNavigateToNowPlaying = { nav.navigate(NavRoutes.NowPlaying.route) },
+                    onNavigateToLyrics = { nav.navigate(NavRoutes.Lyrics.route) },
+                    onNavigateToPlayback = { nav.navigate(NavRoutes.PlaybackSettings.route) },
+                    onNavigateToLibrary = { nav.navigate(NavRoutes.LibraryProfile.route) },
+                    onNavigateToNetwork = { nav.navigate(NavRoutes.Network.route) },
+                    onNavigateToAdvanced = { nav.navigate(NavRoutes.Advanced.route) },
+                    onNavigateToAbout = { nav.navigate(NavRoutes.AboutProfile.route) })
             }
             composable(NavRoutes.PlayHistory.route) {
                 PlayHistoryScreen(onNavigateBack = { nav.popBackStack() },
@@ -118,6 +119,30 @@ fun NovaNavHost() {
             }
             composable(NavRoutes.Cache.route) {
                 CacheManagementScreen(onNavigateBack = { nav.popBackStack() })
+            }
+            composable(NavRoutes.Appearance.route) {
+                AppearanceScreen(onNavigateBack = { nav.popBackStack() })
+            }
+            composable(NavRoutes.NowPlaying.route) {
+                NowPlayingScreen(onNavigateBack = { nav.popBackStack() })
+            }
+            composable(NavRoutes.Lyrics.route) {
+                LyricsSettingsScreen(onNavigateBack = { nav.popBackStack() })
+            }
+            composable(NavRoutes.PlaybackSettings.route) {
+                PlaybackSettingsScreen(onNavigateBack = { nav.popBackStack() })
+            }
+            composable(NavRoutes.LibraryProfile.route) {
+                LibraryProfileScreen(onNavigateBack = { nav.popBackStack() })
+            }
+            composable(NavRoutes.Network.route) {
+                NetworkScreen(onNavigateBack = { nav.popBackStack() })
+            }
+            composable(NavRoutes.Advanced.route) {
+                AdvancedScreen(onNavigateBack = { nav.popBackStack() })
+            }
+            composable(NavRoutes.AboutProfile.route) {
+                AboutProfileScreen(onNavigateBack = { nav.popBackStack() })
             }
             // ── Settings ──
             composable(NavRoutes.Settings.route) {
