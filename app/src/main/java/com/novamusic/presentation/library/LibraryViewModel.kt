@@ -1,13 +1,16 @@
 package com.novamusic.presentation.library
 
+import android.content.Context
 import android.net.Uri
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.novamusic.data.scanner.MetadataExtractor
 import com.novamusic.domain.model.Song
 import com.novamusic.domain.repository.MusicRepository
 import com.novamusic.domain.repository.SortOrder
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 import javax.inject.Inject
@@ -16,37 +19,25 @@ private const val TAG = "LibraryVM"
 
 data class LibraryUiState(
     val songs: List<Song> = emptyList(),
-    val recentSongs: List<Song> = emptyList(),
     val artists: List<String> = emptyList(),
     val albums: List<String> = emptyList(),
     val isLoading: Boolean = true,
     val error: String? = null,
     val searchQuery: String = "",
-    val isSearchActive: Boolean = false,
-    val currentCategory: Category = Category.ALL,
     val sortOrder: SortOrder = SortOrder.TITLE_ASC,
-    val viewMode: ViewMode = ViewMode.LIST,
-    val isMultiSelectMode: Boolean = false,
-    val selectedSongIds: Set<Long> = emptySet(),
     val isImporting: Boolean = false,
     val importProgress: ImportProgress? = null
 )
-
-enum class Category { ALL, ARTIST, ALBUM }
-enum class ViewMode { LIST, GRID }
-data class ImportProgress(
-    val scannedCount: Int = 0,
-    val foundCount: Int = 0,
-    val importedCount: Int = 0,
-    val isComplete: Boolean = false
-)
+data class ImportProgress(val scanned: Int = 0, val found: Int = 0, val imported: Int = 0)
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    private val musicRepository: MusicRepository
+    private val musicRepository: MusicRepository,
+    private val metadataExtractor: MetadataExtractor,
+    @ApplicationContext private val context: Context
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(LibraryUiState())
-    val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
+    private val _s = MutableStateFlow(LibraryUiState())
+    val uiState: StateFlow<LibraryUiState> = _s.asStateFlow()
     private var loadJob: Job? = null
 
     init { loadAll() }
@@ -55,11 +46,11 @@ class LibraryViewModel @Inject constructor(
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
             try {
-                musicRepository.getAllSongs(_uiState.value.sortOrder).catch { e ->
-                    Log.e(TAG, "loadSongs error: ${e.message}")
-                    _uiState.update { it.copy(error = e.message, isLoading = false) }
+                musicRepository.getAllSongs(_s.value.sortOrder).catch { e ->
+                    Log.e(TAG, "loadAll: ${e.message}")
+                    _s.update { it.copy(error = e.message, isLoading = false) }
                 }.collect { songs ->
-                    _uiState.update { it.copy(
+                    _s.update { it.copy(
                         songs = songs,
                         artists = songs.map { s -> s.artist }.distinct().sorted(),
                         albums = songs.map { s -> s.album }.distinct().sorted(),
@@ -67,73 +58,76 @@ class LibraryViewModel @Inject constructor(
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "loadAll crash: ${e.message}", e)
-                _uiState.update { it.copy(error = e.message, isLoading = false) }
+                _s.update { it.copy(error = e.message, isLoading = false) }
             }
         }
     }
 
-    fun onSortOrderChanged(sortOrder: SortOrder) {
-        _uiState.update { it.copy(sortOrder = sortOrder, isLoading = true) }
-        loadAll()
-    }
+    fun onSortOrderChanged(order: SortOrder) { _s.update { it.copy(sortOrder = order, isLoading = true) }; loadAll() }
+    fun onSearchQueryChange(q: String) { _s.update { it.copy(searchQuery = q) } }
+    fun clearSearch() { _s.update { it.copy(searchQuery = "") } }
 
-    fun onSearchQueryChange(query: String) {
-        _uiState.update { it.copy(searchQuery = query, isSearchActive = query.isNotEmpty()) }
-    }
-    fun clearSearch() { _uiState.update { it.copy(searchQuery = "", isSearchActive = false) } }
-
-    fun toggleMultiSelectMode() {
-        _uiState.update { if (it.isMultiSelectMode) it.copy(isMultiSelectMode = false, selectedSongIds = emptySet())
-            else it.copy(isMultiSelectMode = true, selectedSongIds = emptySet()) }
-    }
-    fun toggleSongSelection(id: Long) {
-        _uiState.update { s -> val set = s.selectedSongIds.toMutableSet()
-            if (set.contains(id)) set.remove(id) else set.add(id)
-            s.copy(selectedSongIds = set) }
-    }
-    fun selectAllSongs() { _uiState.update { it.copy(selectedSongIds = it.songs.map { song -> song.id }.toSet()) } }
-
-    fun deleteSelectedSongs() {
-        viewModelScope.launch {
-            val ids = _uiState.value.selectedSongIds
-            if (ids.isEmpty()) return@launch
-            try {
-                withContext(Dispatchers.IO) { musicRepository.deleteSongs(ids.toList()) }
-                _uiState.update { it.copy(selectedSongIds = emptySet(), isMultiSelectMode = false) }
-                loadAll()
-            } catch (e: Exception) {
-                _uiState.update { it.copy(error = e.message) }
-            }
-        }
-    }
-
+    /** 真实文件导入 - 使用 MetadataExtractor */
     fun importFiles(uris: List<Uri>) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isImporting = true, importProgress = ImportProgress(scannedCount = uris.size)) }
+            _s.update { it.copy(isImporting = true, importProgress = ImportProgress(scanned = uris.size)) }
+            var imported = 0
             try {
-                withContext(Dispatchers.IO + SupervisorJob()) { musicRepository.importSongs(emptyList()) }
+                val songs = withContext(Dispatchers.IO) {
+                    uris.mapNotNull { uri ->
+                        metadataExtractor.extractMetadata(uri)?.also {
+                            try { musicRepository.importSong(it) } catch (e: Exception) { Log.w(TAG, "Skip ${it.title}: ${e.message}") }
+                        }
+                    }
+                }
+                imported = songs.size
+            } catch (e: Exception) {
+                Log.e(TAG, "importFiles: ${e.message}")
+                _s.update { it.copy(error = e.message) }
+            } finally {
+                _s.update { it.copy(isImporting = false, importProgress = ImportProgress(scanned = uris.size, imported = imported)) }
                 loadAll()
-            } catch (e: Exception) { _uiState.update { it.copy(error = e.message) } }
-            finally { _uiState.update { it.copy(isImporting = false) } }
+            }
         }
     }
 
+    /** 扫描文件夹 */
     fun scanFolder(uri: Uri) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isImporting = true) }
-            try { withContext(Dispatchers.IO) { /* scan logic uses SAF */ } }
-            catch (e: Exception) { _uiState.update { it.copy(error = e.message) } }
-            finally { _uiState.update { it.copy(isImporting = false) }; loadAll() }
+            _s.update { it.copy(isImporting = true) }
+            try {
+                withContext(Dispatchers.IO) {
+                    val children = context.contentResolver.query(
+                        uri, null, null, null, null
+                    )?.use { cursor ->
+                        val audioUris = mutableListOf<Uri>()
+                        val nameCol = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                        while (cursor.moveToNext()) {
+                            val name = cursor.getString(nameCol) ?: continue
+                            if (name.endsWith(".mp3") || name.endsWith(".flac") || name.endsWith(".m4a") ||
+                                name.endsWith(".ogg") || name.endsWith(".wav") || name.endsWith(".aac")) {
+                                cursor.getString(0)?.let { id ->
+                                    audioUris.add(android.provider.DocumentsContract.buildDocumentUriUsingTree(uri, id))
+                                }
+                            }
+                        }
+                        audioUris
+                    } ?: emptyList()
+                    children.forEach { audioUri ->
+                        metadataExtractor.extractMetadata(audioUri)?.let { song ->
+                            try { musicRepository.importSong(song) } catch (_: Exception) {}
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "scanFolder: ${e.message}")
+                _s.update { it.copy(error = e.message) }
+            } finally {
+                _s.update { it.copy(isImporting = false) }
+                loadAll()
+            }
         }
     }
 
-    fun cancelScan() { _uiState.update { it.copy(isImporting = false, importProgress = null) } }
-    fun dismissImportProgress() { _uiState.update { it.copy(importProgress = null) } }
-
-    fun toggleFavorite(songId: Long, isFavorite: Boolean) {
-        viewModelScope.launch {
-            try { withContext(Dispatchers.IO) { musicRepository.toggleFavorite(songId, isFavorite) }; loadAll() }
-            catch (e: Exception) { _uiState.update { it.copy(error = e.message) } }
-        }
-    }
+    fun cancelScan() { _s.update { it.copy(isImporting = false) } }
 }
