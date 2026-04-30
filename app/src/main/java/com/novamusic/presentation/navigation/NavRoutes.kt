@@ -28,6 +28,14 @@ sealed class NavRoutes(val route: String) {
     data object Stats : NavRoutes("stats")
     data object Cache : NavRoutes("cache")
     data object PlayHistory : NavRoutes("play_history")
+    data object Appearance : NavRoutes("appearance")
+    data object NowPlaying : NavRoutes("now_playing")
+    data object Lyrics : NavRoutes("lyrics")
+    data object PlaybackSettings : NavRoutes("playback_settings")
+    data object LibraryProfile : NavRoutes("library_profile")
+    data object Network : NavRoutes("network")
+    data object Advanced : NavRoutes("advanced")
+    data object AboutProfile : NavRoutes("about_profile")
     data object About : NavRoutes("about")
 }
 
