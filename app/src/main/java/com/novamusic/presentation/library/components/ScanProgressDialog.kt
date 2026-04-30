@@ -14,57 +14,21 @@ fun ScanProgressDialog(
     onCancel: () -> Unit,
     onDismiss: () -> Unit
 ) {
+    val done = progress.imported >= progress.scanned && progress.scanned > 0
     AlertDialog(
-        onDismissRequest = {
-            if (progress.isComplete) onDismiss()
-        },
-        title = {
-            Text(
-                if (progress.isComplete) "导入完成" else "正在扫描…"
-            )
-        },
+        onDismissRequest = { if (done) onDismiss() },
+        title = { Text(if (done) "导入完成" else "正在扫描...") },
         text = {
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (!progress.isComplete) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(48.dp)
-                    )
-                    Spacer(modifier = Modifier.height(16.dp))
-                }
-
-                Text(
-                    text = "已扫描: ${progress.scannedCount} 个文件",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "发现音频: ${progress.foundCount} 首",
-                    style = MaterialTheme.typography.bodyMedium
-                )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "已导入: ${progress.importedCount} 首",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+            Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                if (!done) { CircularProgressIndicator(Modifier.size(48.dp)); Spacer(Modifier.height(16.dp)) }
+                Text("已扫描: ${progress.scanned} 个文件", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(4.dp))
+                Text("发现音频: ${progress.found} 首", style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(4.dp))
+                Text("已导入: ${progress.imported} 首", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
             }
         },
-        confirmButton = {
-            if (progress.isComplete) {
-                TextButton(onClick = onDismiss) {
-                    Text("完成")
-                }
-            }
-        },
-        dismissButton = {
-            if (!progress.isComplete) {
-                TextButton(onClick = onCancel) {
-                    Text("取消")
-                }
-            }
-        }
+        confirmButton = { if (done) TextButton(onClick = onDismiss) { Text("完成") } },
+        dismissButton = { if (!done) TextButton(onClick = onCancel) { Text("取消") } }
     )
 }
