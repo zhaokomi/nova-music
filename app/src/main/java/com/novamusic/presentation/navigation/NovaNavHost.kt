@@ -161,10 +161,12 @@ private fun PlayerNavBtn(ps: com.novamusic.service.PlaybackState, onClick: () ->
     val inf = rememberInfiniteTransition(label = "spin")
     val rot by inf.animateFloat(0f, 360f, infiniteRepeatable(tween(8000, easing = LinearEasing)), label = "r")
     val song = ps.currentSong; val playing = ps.isPlaying
+    val cover = song?.coverPath
     Box(Modifier.size(36.dp).clip(CircleShape).border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f), CircleShape), contentAlignment = Alignment.Center) {
         IconButton(onClick = onClick, Modifier.fillMaxSize()) {
-            if (song?.coverPath != null) AsyncImage(song.coverPath, "播", Modifier.fillMaxSize().clip(CircleShape).graphicsLayer { if (playing) rotationZ = rot }, ContentScale.Crop)
-            else Icon(Icons.Default.PlayArrow, "播", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
+            if (cover != null) AsyncImage(model = cover, contentDescription = "播放", contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize().clip(CircleShape).graphicsLayer { if (playing) rotationZ = rot })
+            else Icon(Icons.Default.PlayArrow, "播放", Modifier.size(20.dp), tint = MaterialTheme.colorScheme.primary)
         }
     }
 }
