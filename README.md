@@ -1,1 +1,2 @@
-# NM
+# NovaMusic
+v1.0.6
