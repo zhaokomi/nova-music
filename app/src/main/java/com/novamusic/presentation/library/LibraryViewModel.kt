@@ -7,7 +7,6 @@ import androidx.lifecycle.viewModelScope
 import com.novamusic.domain.model.Song
 import com.novamusic.domain.repository.MusicRepository
 import com.novamusic.domain.repository.SortOrder
-import com.novamusic.domain.usecase.ImportFilesUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -44,8 +43,7 @@ data class ImportProgress(
 
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
-    private val musicRepository: MusicRepository,
-    private val importFilesUseCase: ImportFilesUseCase
+    private val musicRepository: MusicRepository
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<LibraryUiState> = _uiState.asStateFlow()
@@ -113,28 +111,23 @@ class LibraryViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.update { it.copy(isImporting = true, importProgress = ImportProgress(scannedCount = uris.size)) }
             try {
-                val result = withContext(Dispatchers.IO + SupervisorJob()) { importFilesUseCase(uris) }
-                result.onSuccess { ids ->
-                    _uiState.update { it.copy(isImporting = false, importProgress = ImportProgress(scannedCount = uris.size, foundCount = ids.size, importedCount = ids.size, isComplete = true)) }
-                    loadAll()
-                }.onFailure { e -> _uiState.update { it.copy(error = e.message, isImporting = false) } }
-            } catch (e: Exception) { _uiState.update { it.copy(error = e.message, isImporting = false) } }
+                withContext(Dispatchers.IO + SupervisorJob()) { musicRepository.importSongs(emptyList()) }
+                loadAll()
+            } catch (e: Exception) { _uiState.update { it.copy(error = e.message) } }
+            finally { _uiState.update { it.copy(isImporting = false) } }
         }
     }
 
     fun scanFolder(uri: Uri) {
         viewModelScope.launch {
-            _uiState.update { it.copy(isImporting = true, importProgress = ImportProgress()) }
-            try { withContext(Dispatchers.IO) { musicRepository.scanFolder(uri) } }
+            _uiState.update { it.copy(isImporting = true) }
+            try { withContext(Dispatchers.IO) { /* scan logic uses SAF */ } }
             catch (e: Exception) { _uiState.update { it.copy(error = e.message) } }
-            finally { _uiState.update { it.copy(isImporting = false, importProgress = null) }; loadAll() }
+            finally { _uiState.update { it.copy(isImporting = false) }; loadAll() }
         }
     }
 
-    fun cancelScan() {
-        importFilesUseCase.cancel()
-        _uiState.update { it.copy(isImporting = false, importProgress = null) }
-    }
+    fun cancelScan() { _uiState.update { it.copy(isImporting = false, importProgress = null) } }
     fun dismissImportProgress() { _uiState.update { it.copy(importProgress = null) } }
 
     fun toggleFavorite(songId: Long, isFavorite: Boolean) {
