@@ -78,13 +78,12 @@ class PlayerViewModel @Inject constructor(
                     return@launch
                 }
 
-                // 2. 获取所有歌曲构建完整队列
+                // 2. 获取所有歌曲构建完整队列（5秒超时保护）
                 val allSongs = withContext(Dispatchers.IO) {
                     val flow = musicRepository.getAllSongs(
                         com.novamusic.domain.repository.SortOrder.TITLE_ASC
                     )
-                    // 用 first() 取一次快照
-                    flow.first()
+                    kotlinx.coroutines.withTimeout(5_000L) { flow.first() }
                 }
 
                 if (allSongs.isEmpty()) {
